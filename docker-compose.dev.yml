@@ -15,7 +15,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
     networks:
       internal:
-        ipv4_address: 172.30.0.10
+        ipv4_address: 172.40.0.10
     depends_on:
       db:
         condition: service_healthy
@@ -71,7 +71,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
     networks:
       internal:
-        ipv4_address: 172.30.0.11
+        ipv4_address: 172.40.0.11
     depends_on:
       db:
         condition: service_healthy
@@ -81,7 +81,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/24
+        - subnet: 172.40.0.0/24
 
 volumes:
   db_data_dev:
