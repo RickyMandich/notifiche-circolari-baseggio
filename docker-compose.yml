@@ -1,7 +1,6 @@
 services:
   app:
     build: .
-    image: notifiche-circolari-baseggio:prod
     container_name: notifiche-circolari-baseggio_app
     restart: unless-stopped
     volumes:
@@ -11,11 +10,11 @@ services:
     environment:
       - DB_HOST=db
       - DB_DATABASE=notifiche-circolari-baseggio
-      - DB_USERNAME=laravel
+      - DB_USERNAME=notifiche-circolari-baseggio
       - DB_PASSWORD=
     networks:
       internal:
-        ipv4_address: 172.22.0.10
+        ipv4_address: 172.25.0.10
     depends_on:
       db:
         condition: service_healthy
@@ -27,8 +26,7 @@ services:
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./public:/var/www/html/public:ro
-      - build_assets:/var/www/html/public/build:ro # era .../public_build
-      - ./storage/app/public:/var/www/html/storage/app/public:ro
+      - build_assets:/var/www/html/public/build:ro
     networks:
       - internal
       - proxy
@@ -36,7 +34,7 @@ services:
       - app
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.notifiche-circolari-baseggio.rule=Host(`notifiche-circolari-baseggio-test.mandich.dev`)"
+      - "traefik.http.routers.notifiche-circolari-baseggio.rule=Host(`notifiche-circolari-baseggio.mandich.dev`)"
       - "traefik.http.routers.notifiche-circolari-baseggio.entrypoints=websecure"
       - "traefik.http.routers.notifiche-circolari-baseggio.tls.certresolver=letsencrypt"
       - "traefik.http.services.notifiche-circolari-baseggio.loadbalancer.server.port=80"
@@ -55,14 +53,14 @@ services:
     networks:
       - internal
     healthcheck:
-      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
   worker:
-    image: notifiche-circolari-baseggio:prod
+    build: .
     container_name: notifiche-circolari-baseggio_worker
     restart: unless-stopped
     command: supervisord -c /etc/supervisor/worker.conf
@@ -74,11 +72,11 @@ services:
     environment:
       - DB_HOST=db
       - DB_DATABASE=notifiche-circolari-baseggio
-      - DB_USERNAME=laravel
+      - DB_USERNAME=notifiche-circolari-baseggio
       - DB_PASSWORD=
     networks:
       internal:
-        ipv4_address: 172.22.0.11
+        ipv4_address: 172.25.0.11
     depends_on:
       db:
         condition: service_healthy
@@ -88,7 +86,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.22.0.0/24
+        - subnet: 172.25.0.0/24
   proxy:
     external: true
 
