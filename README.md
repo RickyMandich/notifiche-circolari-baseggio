@@ -1,59 +1,107 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Notifiche Circolari Baseggio
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Applicazione Laravel 12 che controlla periodicamente il sito dell'Istituto Comprensivo di Baseggio
+(<https://www.icbaseggio.edu.it>), rileva le nuove circolari tramite le WordPress REST API e invia
+una email di notifica a tutti gli iscritti tramite [Resend](https://resend.com).
+Gli iscritti si gestiscono da una piccola interfaccia web protetta da login.
 
-## About Laravel
+## Come funziona
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+```
+scheduler (ogni 30 min)
+   └─ php artisan circulars:check
+        ├─ WordpressApiService  → GET {WORDPRESS_POSTS_URL}  (ultimi N post)
+        ├─ confronto wp_post_id con la tabella `circulars`
+        ├─ salva le circolari nuove
+        └─ per ogni nuova circolare e ogni iscritto accoda NewCircularNotification
+                                   └─ worker di coda → mailer Resend
+```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Note importanti:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Prima esecuzione**: se la tabella `circulars` è vuota, il comando salva le circolari attuali
+  *senza* inviare email (evita di mandare agli iscritti tutto l'arretrato). Le notifiche partono
+  dalla seconda esecuzione in poi.
+- Ogni iscritto riceve una mail separata (gli indirizzi non sono visibili agli altri).
+- Se il sito WordPress non risponde il comando termina con errore e non modifica il database;
+  riprova al giro successivo.
 
-## Learning Laravel
+## Struttura del codice
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+| Percorso | Ruolo |
+|---|---|
+| `app/Services/WordpressApiService.php` | Chiama le API WP e normalizza i post (titolo ripulito da HTML/entità, data da `date_gmt`) |
+| `app/Console/Commands/CheckNewCirculars.php` | Comando `circulars:check` (logica di rilevamento e invio) |
+| `app/Console/Commands/CreateAdminUser.php` | Comando `users:create {name} {email}` per creare chi può accedere |
+| `app/Mail/NewCircularNotification.php` | Mailable in coda; vista in `resources/views/emails/new-circular.blade.php` |
+| `app/Http/Controllers/SubscriberController.php` | Elenco / aggiunta / eliminazione iscritti |
+| `app/Http/Controllers/Auth/LoginController.php` | Login e logout a sessione |
+| `app/Models/Subscriber.php`, `Circular.php` | Modelli (`subscribers`, `circulars`) |
+| `routes/web.php` | Rotte; tutto sotto `/iscritti` richiede `auth` |
+| `routes/console.php` | Schedulazione di `circulars:check` (ogni 30 minuti, senza sovrapposizioni) |
+| `config/services.php` | Sezioni `resend` e `wordpress` |
+| `tests/Feature/` | Test Pest (iscritti/auth, rilevamento circolari, mail) |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Setup locale
 
-## Laravel Sponsors
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+npm install && npm run build   # opzionale, solo per gli stili Tailwind
+php artisan users:create "Nome Cognome" tu@example.com   # chiede la password
+php artisan serve
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Poi apri `http://localhost:8000`, accedi e aggiungi gli iscritti.
 
-### Premium Partners
+Per provare il flusso a mano:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+php artisan circulars:check      # 1ª volta: salva lo stato attuale, nessuna mail
+php artisan circulars:check      # dalle successive notifica le nuove circolari
+php artisan queue:work           # elabora le mail in coda
+```
 
-## Contributing
+Con `MAIL_MAILER=log` (default in `.env.example`) le mail finiscono in `storage/logs/laravel.log`.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Configurazione (`.env`)
 
-## Code of Conduct
+| Variabile | Descrizione |
+|---|---|
+| `MAIL_MAILER` | `log` in sviluppo, `resend` in produzione |
+| `RESEND_API_KEY` | Chiave API Resend |
+| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | Mittente; in produzione deve appartenere a un dominio verificato su Resend |
+| `WORDPRESS_POSTS_URL` | Endpoint dei post (default: `https://www.icbaseggio.edu.it/wp-json/wp/v2/posts`) |
+| `WORDPRESS_POSTS_PER_PAGE` | Quanti post leggere a ogni controllo (default 20) |
+| `QUEUE_CONNECTION` | `database` (le mail sono accodate, serve un worker) |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Test
 
-## Security Vulnerabilities
+```bash
+php artisan test
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+I test usano SQLite in memoria, `Http::fake()` per WordPress e `Mail::fake()` per le email:
+non servono rete né chiavi Resend.
 
-## License
+## Deploy (Docker)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+`docker-compose.yml` avvia `app`, `nginx` (dietro Traefik), `db` (MariaDB) e `worker`.
+Il container `worker` esegue via supervisor sia `queue:work` sia `schedule:work`, quindi
+scheduler e invio mail sono già coperti. Su un nuovo ambiente:
+
+```bash
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan users:create "Nome Cognome" tu@example.com
+```
+
+Ricorda di impostare `MAIL_MAILER=resend` e `RESEND_API_KEY` nel `.env` montato nei container.
+
+## Convenzioni di sviluppo
+
+- Non modificare `vendor/` né `node_modules/`.
+- Le modifiche non banali partono da un `implementationPlan-{modifica}.md` nella root,
+  rinominato `implementationPlan-V-{modifica}.md` a lavoro concluso.
+- Tenere aggiornati `todo.md` e questo README a ogni modifica.

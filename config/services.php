@@ -22,6 +22,11 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    'wordpress' => [
+        'posts_url' => env('WORDPRESS_POSTS_URL', 'https://www.icbaseggio.edu.it/wp-json/wp/v2/posts'),
+        'per_page' => (int) env('WORDPRESS_POSTS_PER_PAGE', 20),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

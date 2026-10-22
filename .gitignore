@@ -28,6 +28,7 @@
 implementationPlan-*.pdf
 
 *.sql
+!/docker/mysql/*.sql
 
 /examples
 /storage/app/public/cards

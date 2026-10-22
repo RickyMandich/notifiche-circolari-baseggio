@@ -1,7 +1,5 @@
 <?php
 
-test('the application returns a successful response', function () {
-    $response = $this->get('/');
-
-    $response->assertStatus(200);
+test('la home reindirizza alla gestione iscritti', function () {
+    $this->get('/')->assertRedirect('/iscritti');
 });
